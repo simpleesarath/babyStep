@@ -1,40 +1,47 @@
-const { isBefore, isAfter, parseISO, addMinutes, format } = require('date-fns');
+const { isBefore, isAfter, parseISO, addMinutes, format, startOfDay, endOfDay } = require('date-fns');
 const { Appointment } = require('../models');
 
-/**
- * Generate available time slots based on doctor's working hours and existing appointments.
- * @param {Date} date - The date for which to find available slots.
- * @param {Object} doctor - The doctor object containing working hours.
- * @returns {Promise<Array>} - List of available time slots.
- */
 const getAvailableSlots = async (date, doctor) => {
   try {
-    // Define working hours
-    const startTime = parseISO(`${format(date, 'yyyy-MM-dd')}T${doctor.workingHours.start}`);
-    const endTime = parseISO(`${format(date, 'yyyy-MM-dd')}T${doctor.workingHours.end}`);
-
-    // Fetch existing appointments
+    const dayStart = startOfDay(date);
+    const dayEnd = endOfDay(date);
+    
+    // Fetch existing appointments for the day
     const appointments = await Appointment.find({
       doctorId: doctor._id,
-      date: { $gte: startTime, $lt: endTime }
+      date: {
+        $gte: dayStart,
+        $lte: dayEnd
+      }
     });
 
-    // Define slot duration (30 mins)
-    const slotDuration = 30;
-    let slots = [];
+    // Convert working hours to datetime
+    const dateStr = format(date, 'yyyy-MM-dd');
+    const startTime = parseISO(`${dateStr}T${doctor.workingHours.start}`);
+    const endTime = parseISO(`${dateStr}T${doctor.workingHours.end}`);
+
+    // Generate 30-minute slots
+    const slots = [];
     let currentSlot = startTime;
 
     while (isBefore(currentSlot, endTime)) {
-      const slotEnd = addMinutes(currentSlot, slotDuration);
-      const isConflict = appointments.some(
-        (appointment) => isBefore(appointment.date, slotEnd) && isAfter(appointment.date, currentSlot)
-      );
+      const slotEnd = addMinutes(currentSlot, 30);
+      
+      // Check if slot conflicts with any existing appointment
+      const isBooked = appointments.some(apt => {
+        const aptTime = parseISO(apt.date.toISOString());
+        return (
+          (isBefore(currentSlot, aptTime) && isAfter(slotEnd, aptTime)) ||
+          (isBefore(currentSlot, addMinutes(aptTime, apt.duration)) && 
+           isAfter(slotEnd, aptTime))
+        );
+      });
 
-      if (!isConflict) {
-        slots.push(format(currentSlot, 'HH:mm'));
+      if (!isBooked) {
+        slots.push(format(currentSlot, "HH:mm"));
       }
-
-      currentSlot = addMinutes(currentSlot, slotDuration);
+      
+      currentSlot = slotEnd;
     }
 
     return slots;
