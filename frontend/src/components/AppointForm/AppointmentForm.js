@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { api } from '../../services/api';
+
+// Used the environment variable from Render deployment
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 const AppointmentForm = ({ doctor, onSuccess }) => {
   const [selectedDate, setSelectedDate] = useState('');
@@ -24,15 +26,19 @@ const AppointmentForm = ({ doctor, onSuccess }) => {
     try {
       setLoading(true);
       setError(null);
-      // Format the date as YYYY-MM-DD for the API
-      const formattedDate = selectedDate;
-      const response = await fetch(`http://localhost:5000/api/doctors/${doctor._id}/slots?date=${formattedDate}`);
+      console.log('Fetching slots from:', `${API_URL}/api/doctors/${doctor._id}/slots?date=${selectedDate}`);
+      const response = await fetch(`${API_URL}/api/doctors/${doctor._id}/slots?date=${selectedDate}`);
+      
       if (!response.ok) {
+        console.error('Slots fetch failed:', response.status, response.statusText);
         throw new Error('Failed to fetch time slots');
       }
+      
       const slots = await response.json();
+      console.log('Fetched slots:', slots);
       setAvailableSlots(slots);
     } catch (err) {
+      console.error('Error in fetchAvailableSlots:', err);
       setError('Failed to fetch available slots');
       setAvailableSlots([]);
     } finally {
@@ -60,10 +66,10 @@ const AppointmentForm = ({ doctor, onSuccess }) => {
     setSuccessMessage('');
 
     try {
-      // Combine date and time for the appointment
       const appointmentDateTime = `${selectedDate}T${selectedSlot}`;
-
-      const response = await fetch('http://localhost:5000/api/appointments', {
+      console.log('Submitting appointment to:', `${API_URL}/api/appointments`);
+      
+      const response = await fetch(`${API_URL}/api/appointments`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -78,8 +84,12 @@ const AppointmentForm = ({ doctor, onSuccess }) => {
       });
 
       if (!response.ok) {
+        console.error('Appointment creation failed:', response.status, response.statusText);
         throw new Error('Failed to book appointment');
       }
+
+      const result = await response.json();
+      console.log('Appointment created:', result);
 
       setSuccessMessage('Appointment booked successfully!');
       // Reset form
@@ -91,11 +101,11 @@ const AppointmentForm = ({ doctor, onSuccess }) => {
       setSelectedDate('');
       setSelectedSlot('');
       
-      // Wait 2 seconds before redirecting
       setTimeout(() => {
         onSuccess();
       }, 2000);
     } catch (err) {
+      console.error('Error in handleSubmit:', err);
       setError(err.message);
     } finally {
       setLoading(false);
